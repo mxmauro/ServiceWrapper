@@ -1,0 +1,37 @@
+name: Release Build
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checking out repository
+        uses: actions/checkout@v6
+
+      - name: Setting up MSBuild
+        uses: microsoft/setup-msbuild@v2
+        with:
+          vs-version: "[18.0,19.0)"
+
+      - name: Building Release x64
+        shell: pwsh
+        run: >
+          msbuild .\ServiceWrapper.slnx
+          /t:Rebuild
+          /p:Configuration=Release
+          /p:Platform=x64
+
+      - name: Uploading release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            bin/sw.exe
+            bin/sw.pdb

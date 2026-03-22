@@ -10,26 +10,23 @@ permissions:
 
 jobs:
   build-release:
-    runs-on: windows-latest
+    runs-on: windows-2025-vs2026
 
     steps:
-      - name: Checking out repository
+      - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Setting up MSBuild
+      - name: Setup up MSBuild
         uses: microsoft/setup-msbuild@v2
         with:
           vs-version: "[18.0,19.0)"
 
-      - name: Building Release x64
+      - name: Build Release x64
         shell: pwsh
         run: >
-          msbuild .\ServiceWrapper.slnx
-          /t:Rebuild
-          /p:Configuration=Release
-          /p:Platform=x64
+          msbuild .\ServiceWrapper.slnx /t:Rebuild /p:Configuration=Release /p:Platform=x64
 
-      - name: Uploading release assets
+      - name: Upload assets
         uses: softprops/action-gh-release@v2
         with:
           files: |

@@ -1,0 +1,13 @@
+*.~*
+/.vs
+*.suo
+*.ncb
+*.exp
+*.user
+*.sdf
+*.log
+*.obj
+*.ilk
+*.aps
+/bin/
+/obj/

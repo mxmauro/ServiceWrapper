@@ -27,7 +27,11 @@ public:
     bool IsRunning() const noexcept;
 
 private:
+    void CloseHandles() noexcept;
+
+private:
     static const DWORD kdwChildStopTimeoutMs = 10000;
 
     PROCESS_INFORMATION m_piProcessInfo{};
+    HANDLE m_hJob{ nullptr };
 };

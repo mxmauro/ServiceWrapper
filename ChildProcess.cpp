@@ -21,15 +21,7 @@ static BOOL CALLBACK EWP_FindMainWindow(_In_ HWND hwnd, _In_ LPARAM lParam);
 
 ChildProcess::~ChildProcess() noexcept
 {
-    if (m_piProcessInfo.hThread)
-    {
-        CloseHandle(m_piProcessInfo.hThread);
-    }
-
-    if (m_piProcessInfo.hProcess)
-    {
-        CloseHandle(m_piProcessInfo.hProcess);
-    }
+    CloseHandles();
 }
 
 DWORD ChildProcess::Start(const std::wstring& strBinaryPath, const std::wstring& strArguments) noexcept
@@ -38,6 +30,8 @@ DWORD ChildProcess::Start(const std::wstring& strBinaryPath, const std::wstring&
     STARTUPINFOW startupInfo{};
     std::wstring strCommandLine;
     std::wstring strWorkingDirectory;
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION sJobObjExtLimitInfo;
+    DWORD dwOsErr;
 
     try
     {
@@ -65,12 +59,38 @@ DWORD ChildProcess::Start(const std::wstring& strBinaryPath, const std::wstring&
         return ERROR_UNHANDLED_EXCEPTION;
     }
 
-    if (!CreateProcessW(strBinaryPath.c_str(), vecCommandLine.data(), nullptr, nullptr, FALSE, CREATE_NEW_PROCESS_GROUP, nullptr,
-                        strWorkingDirectory.empty() ? nullptr : strWorkingDirectory.c_str(), &startupInfo, &m_piProcessInfo))
+    m_hJob = CreateJobObjectW(nullptr, nullptr);
+    if (!m_hJob)
     {
-        DWORD dwOsErr = GetLastError();
+on_start_error:
+        dwOsErr = GetLastError();
+on_start_error2:
+        CloseHandles();
         LogStartFailed(dwOsErr);
         return dwOsErr;
+    }
+    memset(&sJobObjExtLimitInfo, 0, sizeof(sJobObjExtLimitInfo));
+    sJobObjExtLimitInfo.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+    if (!SetInformationJobObject(m_hJob, JobObjectExtendedLimitInformation, &sJobObjExtLimitInfo, (DWORD)sizeof(sJobObjExtLimitInfo)))
+    {
+        goto on_start_error;
+    }
+    if (!CreateProcessW(strBinaryPath.c_str(), vecCommandLine.data(), nullptr, nullptr, FALSE, CREATE_NEW_PROCESS_GROUP | CREATE_SUSPENDED,
+                        nullptr, strWorkingDirectory.empty() ? nullptr : strWorkingDirectory.c_str(), &startupInfo, &m_piProcessInfo))
+    {
+        goto on_start_error;
+    }
+    if (!AssignProcessToJobObject(m_hJob, m_piProcessInfo.hProcess))
+    {
+        dwOsErr = GetLastError();
+        TerminateProcess(m_piProcessInfo.hProcess, ERROR_PROCESS_ABORTED);
+        goto on_start_error2;
+    }
+    if (ResumeThread(m_piProcessInfo.hThread) == (DWORD)-1)
+    {
+        dwOsErr = GetLastError();
+        TerminateProcess(m_piProcessInfo.hProcess, ERROR_PROCESS_ABORTED);
+        goto on_start_error2;
     }
 
     LogStarted(m_piProcessInfo.dwProcessId);
@@ -85,7 +105,11 @@ void ChildProcess::RequestStop() noexcept
 
     if (!IsRunning())
     {
-        goto graceful_stop;
+not_running:
+        dwExitCode = ExitCode();
+        TerminateJobObject(m_hJob, dwExitCode);
+        LogStoppedGracefully(m_piProcessInfo.dwProcessId, dwExitCode);
+        return;
     }
 
     bSent = FALSE;
@@ -114,25 +138,23 @@ void ChildProcess::RequestStop() noexcept
         WaitForExit(kdwChildStopTimeoutMs);
     }
 
-    if (IsRunning())
+    if (!IsRunning())
     {
-        if (TerminateProcess(m_piProcessInfo.hProcess, ERROR_PROCESS_ABORTED))
-        {
-            WaitForExit(kdwChildStopTimeoutMs);
-            dwExitCode = ExitCode();
-            LogTerminatedForcefully(m_piProcessInfo.dwProcessId, dwExitCode);
-
-        }
-        else
-        {
-            LogTerminateFailed(m_piProcessInfo.dwProcessId, GetLastError());
-        }
-        return;
+        goto not_running;
     }
 
-graceful_stop:
-    dwExitCode = ExitCode();
-    LogStoppedGracefully(m_piProcessInfo.dwProcessId, dwExitCode);
+    if (TerminateJobObject(m_hJob, ERROR_PROCESS_ABORTED) || TerminateProcess(m_piProcessInfo.hProcess, ERROR_PROCESS_ABORTED))
+    {
+        WaitForExit(kdwChildStopTimeoutMs);
+        dwExitCode = ERROR_PROCESS_ABORTED;
+        LogTerminatedForcefully(m_piProcessInfo.dwProcessId, ERROR_PROCESS_ABORTED);
+
+    }
+    else
+    {
+        dwExitCode = ExitCode();
+        LogTerminateFailed(m_piProcessInfo.dwProcessId, GetLastError());
+    }
 }
 
 DWORD ChildProcess::WaitForExitOrStop(HANDLE hStopEvent) noexcept
@@ -158,7 +180,7 @@ DWORD ChildProcess::ProcessId() const noexcept
 
 DWORD ChildProcess::ExitCode() const noexcept
 {
-    DWORD dwExitCode = 0;
+    DWORD dwExitCode = ERROR_SUCCESS;
 
     if (m_piProcessInfo.hProcess)
     {
@@ -176,6 +198,24 @@ bool ChildProcess::IsRunning() const noexcept
     }
 
     return WaitForSingleObject(m_piProcessInfo.hProcess, 0) == WAIT_TIMEOUT;
+}
+
+void ChildProcess::CloseHandles() noexcept
+{
+    if (m_piProcessInfo.hThread)
+    {
+        CloseHandle(m_piProcessInfo.hThread);
+    }
+    if (m_piProcessInfo.hProcess)
+    {
+        CloseHandle(m_piProcessInfo.hProcess);
+    }
+    if (m_hJob)
+    {
+        CloseHandle(m_hJob);
+    }
+    memset(&m_piProcessInfo, 0, sizeof(m_piProcessInfo));
+    m_hJob = nullptr;
 }
 
 // -----------------------------------------------------------------------------

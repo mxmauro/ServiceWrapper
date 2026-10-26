@@ -24,8 +24,8 @@ LANGUAGE LANG_SPANISH, SUBLANG_SPANISH_ARGENTINA
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,0,0,1
- PRODUCTVERSION 1,0,0,1
+ FILEVERSION 1,0,1,1
+ PRODUCTVERSION 1,0,1,1
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -42,12 +42,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "Mauro Leggieri"
             VALUE "FileDescription", "Service Wrapper"
-            VALUE "FileVersion", "1.0.0.1"
+            VALUE "FileVersion", "1.0.1.1"
             VALUE "InternalName", "SW.exe"
-            VALUE "LegalCopyright", "Copyright (C) Mauro Leggieri, 2026"
-            VALUE "OriginalFilename", "ServiceW.exe"
+            VALUE "LegalCopyright", "Copyright (C) Mauro H. Leggieri, 2026"
+            VALUE "OriginalFilename", "SW.exe"
             VALUE "ProductName", "Service Wrapper"
-            VALUE "ProductVersion", "1.0.0.1"
+            VALUE "ProductVersion", "1.0.1.1"
         END
     END
     BLOCK "VarFileInfo"
